@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "neo4j": {
+            "command": "/Users/b0n00pr/.local/bin/uvx",
+            "args": [
+                "mcp-neo4j-cypher",
+                "--db-url",
+                "bolt://localhost",
+                "--username",
+                "neo4j",
+                "--password",
+                "password"
+            ]
+        }
+    }
+}
