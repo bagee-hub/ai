@@ -1,0 +1,219 @@
+# this working version has all the features insert, anamoly detection, report generation and graph relations with order
+# and uses the mcp-neo4j-cypher tool to interact with Neo4j
+
+import asyncio
+from langchain_ollama import ChatOllama
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from langchain_mcp_adapters.tools import load_mcp_tools
+from langgraph.prebuilt import create_react_agent
+import gradio as gr
+import io
+import contextlib
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+llm = ChatOllama(model="qwen3", temperature=0)
+
+
+async def main(json_message):
+    print(json_message)
+    server_params = StdioServerParameters(
+        command="/Users/b0n00pr/.local/bin/uvx",
+        args=[
+            "mcp-neo4j-cypher",
+            "--db-url",
+            "bolt://localhost",
+            "--username",
+            "neo4j",
+            "--password",
+            "password",
+        ],
+    )
+
+    prompt = f"""Given the following JSON:
+
+<json>
+{json_message}
+</json>
+
+Write a Cypher query to insert a `Container` node in Neo4j with this data. Set the other fields and add `insert_time: use the native datetime()`. And execute tool call write_neo4j_cypher Return:
+
+1. The Cypher query
+2. The parameters
+3. A brief result summary with properties set
+            """
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await load_mcp_tools(session)
+            agent = create_react_agent(llm, tools)
+            msg = {"messages": prompt}
+            result = await agent.ainvoke(msg)
+            #for m in result["messages"]:
+            #    m.pretty_print()
+            output_strings = []
+            for m in result["messages"]:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    m.pretty_print()
+                output_strings.append(buf.getvalue())
+            return "\n".join(output_strings)
+
+async def generic_prompt(prompt):
+    print(prompt)
+    server_params = StdioServerParameters(
+        command="/Users/b0n00pr/.local/bin/uvx",
+        args=[
+            "mcp-neo4j-cypher",
+            "--db-url",
+            "bolt://localhost",
+            "--username",
+            "neo4j",
+            "--password",
+            "password",
+        ],
+    )
+
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await load_mcp_tools(session)
+            agent = create_react_agent(llm, tools)
+            msg = {"messages": prompt}
+            result = await agent.ainvoke(msg)
+            #for m in result["messages"]:
+            #    m.pretty_print()
+            output_strings = []
+            for m in result["messages"]:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    m.pretty_print()
+                output_strings.append(buf.getvalue())
+            return "\n".join(output_strings)
+
+
+if __name__ == "__main__":
+    with gr.Blocks() as demo:
+        gr.Markdown("AI Twin")
+        with gr.Row():
+            with gr.Column():
+                json_message = gr.Textbox(
+                label="Json Message",
+                value="{\"containerTrackingId\" : \"abcd1234-1\",  \"location\":\"door101\", \"item\":334343,\"quantity\":5, \"status\":\"AVAILABLE\"}"
+                )
+                submit_btn = gr.Button("Insert data into Neo4j")
+            with gr.Column():
+                output_box = gr.Textbox(label="Insert Result", lines=8, interactive=False)
+        with gr.Row():
+            with gr.Column():
+                detect_anomaly_prompt = gr.Textbox(
+                label="Input",
+                value="Read from neo4j where containerTrackingId = 'abcd1234-1' and detect anomalies in the data."
+                )
+                detect_anomaly_submit_btn = gr.Button("Detect Anomalies")
+            with gr.Column():
+                 detect_anomaly_output_box = gr.Textbox(label="Detected Anomalies", lines=8, interactive=False)
+        with gr.Row():
+            with gr.Column():
+                report_prompt = gr.Textbox(
+                label="Input",
+                value="Get the list of distinct containerTrackingId created in the last 2 hours from neo4j."
+                )
+                report_submit_btn = gr.Button("Generate Report")
+            with gr.Column():
+                 report_output_box = gr.Textbox(label="Report", lines=8, interactive=False)
+        with gr.Row():
+            with gr.Column():
+                graph_relations_prompt = gr.Textbox(
+                label="Input",
+                value="For the containerTrackingId = 'abcd1234-1' in neo4j, create an Order Node with orderId = 'order-1234' and link it to the Container Node for the item present in the Container Node."
+                )
+                graph_relations_submit_btn = gr.Button("Graph relations with order")
+            with gr.Column():
+                 graph_relations_output_box = gr.Textbox(label="Graph", lines=8, interactive=False)
+
+        submit_btn.click(
+            main,  # Pass the async generator function directly
+            inputs=[json_message],
+            outputs=output_box,
+            api_name="chat"
+        )
+        detect_anomaly_submit_btn.click(
+            generic_prompt,  # Pass the async generator function directly
+            inputs=[detect_anomaly_prompt],
+            outputs=detect_anomaly_output_box,
+            api_name="chat"
+        )
+        report_submit_btn.click(
+            generic_prompt,  # Pass the async generator function directly
+            inputs=[report_prompt],
+            outputs=report_output_box,
+            api_name="chat"
+        )
+        graph_relations_submit_btn.click(
+            generic_prompt,  # Pass the async generator function directly
+            inputs=[graph_relations_prompt],
+            outputs=graph_relations_output_box,
+            api_name="chat"
+        )
+    demo.launch()
+
+
+
+
+"""
+---- 83 seconds ----
+
+Given the following JSON:
+                <json>
+                {json_message}
+                </json>
+                Insert or Update it into a Neo4j database as a node with label `Container`. Add a `create_time` property with the current datetime. Ensure the Cypher query uses Neo4j's built-in date/time functions and not APOC, since APOC might not be available. If an error occurs due to an unknown function, correct it and retry with appropriate built-in alternatives. Return the query used, parameters passed, and the final insertion result summary.
+
+--------53 seconds ---------------       
+
+Given the following JSON:
+
+<json>
+{json_message}
+</json>
+
+Write a Cypher query to insert or update a `Container` node in Neo4j with this data. Use `MERGE` on `containerTrackingId` to ensure upsert behavior. Set the other fields and add `create_time: datetime()`. Return:
+
+1. The Cypher query
+2. The parameters
+3. A brief result summary with properties set
+
+--------------=-------
+
+Insert or update with the id in neo4j and add an audit attribute which is of list type with the summary of what changed.
+
+ Given a JSON, parse and identifiy the Nodes and insert or update it in neo4j. Also add a new audit entry with one line summary of significant attributes. 
+
+
+ 
+You are a Neo4j data integration assistant. Your task is to:
+
+Parse the provided JSON input .
+Identify entities (Nodes) based on the JSON structure and content.
+Connect to a Neo4j database and:
+Check if the Node already exists , using a unique identifier (e.g., id, or any other relevant key).
+If it exists , update its properties including setting the updated_at timestamp.
+If it does not exist , create the Node with all current properties and set the created_at and updated_at timestamps.
+For each operation (create or update), generate a one-line summary of the event using significant attributes like: id, status, location, item, quantity, etc.
+Append this summary to a list property called audit on the Node.
+If the JSON contains new attributes not previously present , add them to the existing Node in Neo4j.
+Ensure that your logic is robust to handle varying JSON structures and gracefully extend the schema as needed.
+Return a confirmation of the operation(s) performed, including what was created/updated and how the audit trail was extended.  
+
+{"containerTrackingId" : "abcd1234-1",  "location":"door101", "item":334343,"quantity":5, "status":"AVAILABLE"}
+
+{"containerTrackingId" : "abcd1234-1", "sorter":"fid-lower-001", "lane": 34}
+
+{"containerTrackingId" : "abcd1234-1", "status":"PICKED"}
+"""
